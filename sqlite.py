@@ -2,9 +2,7 @@
 """
 
 from logzero import logger
-from utils import MySqlite
-# from utils import FileInfo # for get_dir_file_list_in_folder and file_info
-from utils import FileInfoSqlite
+from utils import ConfigOps
 from utils import FileSync # for copy_file_in_list
 
 logger.info("Start working...")
@@ -14,11 +12,13 @@ tbl_str_list = ['NAME', 'PATH', 'FILESIZE', 'CHANGETIME', 'REL_NAME']
 table_structure=' TEXT, '.join(tbl_str_list)
 table_structure = f"{table_structure} TEXT"
 table_header=', '.join(tbl_str_list[:-1])
-fs = FileSync(config_file = 'd:/data/code4photo/synchist.txt',
+config_file = 'd:/data/code4photo/synchist.txt'
+fs = FileSync(config_file = config_file,
         table_structure=table_structure,
-        table_header=table_header
+        table_header=table_header,
+        waittime=3,
 )
-fs.one_folder_sync(db=db)
+fs.folder_sync(db = db)
 '''
 fis = FileInfoSqlite(db=db)
 

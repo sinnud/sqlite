@@ -7,6 +7,7 @@ import sqlite3
 import glob
 import shutil
 from inputimeout import inputimeout, TimeoutOccurred
+
 class MySqlite(object):
     """ Interface to SQLite
     """
@@ -42,9 +43,14 @@ class MySqlite(object):
         if not self.conn:
             self.connect()
         cursor = self.conn.cursor()
-        rst = cursor.execute(query)
-        logger.debug(f"Result length: {len(rst)}")
-        return [x for x in rst]
+        cursor.execute(query)
+        try:
+            rst = cursor.fetchall()
+        except Exception as e:
+            logger.error(e)
+            return cursor
+        # logger.debug(f"Result length: {len(rst)}")
+        return rst
 
     def tables(self):
         """ List tables in database
@@ -189,19 +195,27 @@ class ConfigOps(object):
             logger.debug("Finished all folders in config file!!!")
         return folder
     
-    def update_config_with_dirlist(self, dirlist = None):
+    def update_config_with_dirlist(self,
+            newfilecnt = None,
+            updatedfilecnt = None,
+            dirlist = None,
+    ):
         """ Using dirlist to update config file
         """
-        with open(self.config_file, 'w') as f:
+        with open(self.config_file, 'w', encoding="utf-8") as f:
             for idx, line in enumerate(self.config_lines, start = 1):
                 line = line.strip()
                 if idx == self.current_idx:
                     timestampstr = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
                     f.write(f"# {line} -- synced {timestampstr}\n")
+                    if newfilecnt == 0 and updatedfilecnt == 0:
+                        continue
+                    f.write(f"# ---- synced {newfilecnt} new files and {updatedfilecnt} updated files")
                 else:
                     f.write(f"{line}\n")
-            for line in dirlist:
-                f.write(f"{line}\n")
+            if dirlist is not None:
+                for line in dirlist:
+                    f.write(f"{line}\n")
 
 class FileSync(object):
     """ Copy files
@@ -226,7 +240,18 @@ class FileSync(object):
         self.table_header = table_header
         self.dirlist = None
 
-    def one_folder_sync(self, db = None):
+    def folder_sync(self, db = None):
+        """ Sync folder and all sub-folders using config file
+        """
+        co = ConfigOps(config_file=self.config_file)
+        rel_dir = co.get_first_folder()
+        while rel_dir is not None:
+            newfilecnt, updatedfilecnt, dirlist = self.one_folder_sync(db=db, rel_dir=rel_dir)
+            co.update_config_with_dirlist(newfilecnt=newfilecnt, updatedfilecnt=updatedfilecnt, dirlist=dirlist)
+            co = ConfigOps(config_file=self.config_file)
+            rel_dir = co.get_first_folder()
+
+    def one_folder_sync(self, db = None, rel_dir = None):
         """ Sync one filder from config file
         """
         fis = FileInfoSqlite(db=db)
@@ -237,38 +262,42 @@ class FileSync(object):
             table_structure=self.table_structure)
         logger.debug(f"SQLite: prepared table {self.tgt_tbl}.")
 
-        co = ConfigOps(config_file=self.config_file)
-        rel_dir = co.get_first_folder()
-
-        src_dir = f"{self.src_prefix}/{rel_dir}"
-        datalist = FileSync().dir_info(filedir=src_dir)
+        src_dir = f"{self.src_prefix}{rel_dir}"
+        datalist = self.dir_info(filedir=src_dir, store_src_dirlist = True)
         logger.debug(f"Got dir info of {src_dir} into list.")
         fis.import_data(table=self.src_tbl, datalist=datalist, header=self.table_header)
         logger.debug(f"SQLite: {self.src_tbl} imported")
         fis.compute_relname(table=self.src_tbl, prefix=self.src_prefix)
         logger.debug(f"SQLite: {self.src_tbl} rel name")
         
-        tgt_dir = f"{self.tgt_prefix}/{rel_dir}"
-        datalist = FileSync().dir_info(filedir=tgt_dir)
+        tgt_dir = f"{self.tgt_prefix}{rel_dir}"
+        if not os.path.isdir(tgt_dir):
+            rst = self.target_create_folder(new_folder=tgt_dir)
+            if not rst:
+                logger.error(f"You stop creating target folder!!!")
+                exit(1)
+        datalist = self.dir_info(filedir=tgt_dir)
         logger.debug(f"Got dir info of {tgt_dir} into list.")
         fis.import_data(table=self.tgt_tbl, datalist=datalist, header=self.table_header)
         logger.debug(f"SQLite: {self.tgt_tbl} imported")
         fis.compute_relname(table=self.tgt_tbl, prefix=self.tgt_prefix)
         logger.debug(f"SQLite: {self.tgt_tbl} rel name")
 
-        fl=fis.compute_newfiles(table={self.src_tbl}, tablebase={self.tgt_tbl})
+        fl=fis.compute_newfiles(table=self.src_tbl, tablebase=self.tgt_tbl)
         str_fl = '\n'.join(fl)
         logger.debug(f"New files: {str_fl}")
-        FileSync().copy_file_in_list(filelist=fl, source_prefix=self.src_prefix, target_prefix=self.tgt_prefix)
+        self.copy_file_in_list(filelist=fl, source_prefix=self.src_prefix, target_prefix=self.tgt_prefix)
         logger.debug(f"Synced new files.")
+        newfilecnt = len(fl)
 
-        fl=fis.compute_updatedfiles(table={self.src_tbl}, tablebase={self.tgt_tbl})
+        fl=fis.compute_updatedfiles(table=self.src_tbl, tablebase=self.tgt_tbl)
         str_fl = '\n'.join(fl)
         logger.debug(f"Updated files: {str_fl}")
-        FileSync().copy_file_in_list(filelist=fl, source_prefix=self.src_prefix, target_prefix=self.tgt_prefix)
+        self.copy_file_in_list(filelist=fl, source_prefix=self.src_prefix, target_prefix=self.tgt_prefix)
         logger.debug(f"Synced updated files.")
+        updatedfilecnt = len(fl)
 
-        co.update_config_with_dirlist(dirlist=self.dirlist)
+        return newfilecnt, updatedfilecnt, self.dirlist
 
     def promptcall(self):
         """ prompt
@@ -283,10 +312,12 @@ class FileSync(object):
             return True
         return False
 
-    def dir_info(self, filedir = None):
+    def dir_info(self, filedir = None, store_src_dirlist = False):
         """ Get directory file information
         """
-        self.dirlist, filelist = FileInfo().get_dir_file_list_in_folder(thisdir=filedir)
+        dirlist, filelist = FileInfo().get_dir_file_list_in_folder(thisdir=filedir)
+        if store_src_dirlist:
+            self.dirlist = [x.replace(self.src_prefix, '') for x in dirlist]
         datalist=[]
         for f in filelist:
             status, f_info = FileInfo().file_info(thisfile=f)
@@ -313,5 +344,5 @@ class FileSync(object):
             logger.debug(f"Do not create folder '{new_folder}'!!!")
             return False
         logger.debug(f"Start creating folder '{new_folder}'...")
-        # os.makedirs(new_folder, exist_ok=True)
+        os.makedirs(new_folder, exist_ok=True)
         return True

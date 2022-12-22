@@ -1,4 +1,6 @@
 """ Some functions to use
+Updates:
+22DEC2022-LD accelerate executemany based on https://stackoverflow.com/questions/35013453/apsw-or-sqlite3-very-slow-insert-on-executemany
 """
 import os
 from datetime import datetime # timestamp
@@ -88,7 +90,9 @@ class MySqlite(object):
         if not self.conn:
             self.connect()
         cursor = self.conn.cursor()
+        cursor.execute("BEGIN TRANSACTION;")
         cursor.executemany(query, datalist)
+        cursor.execute("COMMIT;")
 
 class FileInfo(object):
     """ Create file information

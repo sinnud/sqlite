@@ -176,7 +176,7 @@ class ConfigOps(object):
             config_file = None,
     ):
         self.config_file = config_file
-        with open(self.config_file, 'r') as f:
+        with open(self.config_file, 'r', encoding="utf-8") as f:
             self.config_lines = f.readlines()
         self.current_idx = None
     
@@ -210,7 +210,7 @@ class ConfigOps(object):
                     f.write(f"# {line} -- synced {timestampstr}\n")
                     if newfilecnt == 0 and updatedfilecnt == 0:
                         continue
-                    f.write(f"# ---- synced {newfilecnt} new files and {updatedfilecnt} updated files")
+                    f.write(f"# ---- synced {newfilecnt} new files and {updatedfilecnt} updated files\n")
                 else:
                     f.write(f"{line}\n")
             if dirlist is not None:

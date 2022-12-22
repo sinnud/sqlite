@@ -1,12 +1,12 @@
 """ Some functions to use
 """
 import os
-from datetime import datetime
-from logzero import logger
-import sqlite3
-import glob
-import shutil
-from inputimeout import inputimeout, TimeoutOccurred
+from datetime import datetime # timestamp
+from logzero import logger # logger
+import sqlite3 # Looks slow when import into table, any way to accelerate it?
+import glob    # for getting file and folder info
+import shutil  # for copy files
+from inputimeout import inputimeout, TimeoutOccurred # time out for waiting inputs
 
 class MySqlite(object):
     """ Interface to SQLite
@@ -94,6 +94,9 @@ class FileInfo(object):
     """ Create file information
     """
     def get_dir_file_list_in_folder(self, thisdir=None):
+        """ Just list sub-folders and files at current folder
+        Do not work recursively
+        """
         dirlist=list()
         filelist=list()
         checklist=glob.glob(f"{thisdir}/*")
@@ -105,6 +108,8 @@ class FileInfo(object):
         return dirlist, filelist
 
     def file_info(self, thisfile=None):
+        """ Get file size and timestamp
+        """
         if not os.path.exists(thisfile):
             logger.error(f"{thisfile} does NOT exist!!!")
             return False, None
@@ -120,6 +125,10 @@ class FileInfo(object):
 
 class FileInfoSqlite(object):
     """ Check file info and store to SQLite database
+    Assumption:
+    - One folder only. SQLite table includes file information under this folder
+    - Table structure: file name, file path, file size, file timestmap, and relative path
+    - Each time drop table and create one (this is slow?)
     """
     def __init__(self, db = None, ):
         self.sqlite = MySqlite(db = db)
@@ -300,7 +309,7 @@ class FileSync(object):
         return newfilecnt, updatedfilecnt, self.dirlist
 
     def promptcall(self):
-        """ prompt
+        """ prompt with timeout
         """
         if self.waittime is None:
             return True
@@ -324,7 +333,7 @@ class FileSync(object):
             if not status:
                 logger.error(f"Failed to get file info for '{f}'")
                 exit()
-            data = tuple(f_info)
+            data = tuple(f_info) # use tuple considering `sqlite3.executemany` format
             datalist.append(data)
         return datalist
 

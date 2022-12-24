@@ -9,6 +9,7 @@ import sqlite3 # Looks slow when import into table, any way to accelerate it?
 import glob    # for getting file and folder info
 import shutil  # for copy files
 from inputimeout import inputimeout, TimeoutOccurred # time out for waiting inputs
+from sys import exit
 
 class MySqlite(object):
     """ Interface to SQLite
@@ -81,7 +82,7 @@ class MySqlite(object):
         if len(self.execute(qry)) == 0:
             return False
         else:
-            return True        
+            return True
 
     def import_from_datalist(self, query, datalist):
         """ import data list into table using query
@@ -227,7 +228,7 @@ class ConfigOps(object):
                 else:
                     f.write(f"{line}\n")
             if dirlist is not None:
-                for line in dirlist:
+                for line in sorted(dirlist):
                     f.write(f"{line}\n")
 
 class FileSync(object):

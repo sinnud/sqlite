@@ -27,3 +27,9 @@
     - The method `folder_sync` just loop calling `one_folder_sync`
 - File `sqlite.py` includes usage of tools in `utils.py`
   - The main part just call the above class
+
+## Text to Cellphone
+- Create account using gmail on twilio with trial version
+- The trial version with $15.50 balance free. There will be monthly charge from this balance.
+- It may not work when balance go to ZERO.
+- VENV need to install moduel `twilio` before run the code here.

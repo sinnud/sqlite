@@ -48,6 +48,11 @@ verification_check = client.verify.v2.services(verify_sid) \
 print(verification_check.status)
 """
 import os
+""" Create account using gmail on twilio with trial version
+The trial version with $15.50 balance free. There will be monthly charge from this balance.
+It may not work when balance go to ZERO.
+VENV need to install moduel `twilio` before run the code here.
+"""
 from twilio.rest import Client # pip install twilio
 
 def textme(msg = None,):
